@@ -326,7 +326,11 @@ function App() {
 
             } else if (mode === 'only_this') {
                 // ── Editar apenas esta parcela recorrente ────────────────────────
-                await updateDoc(doc(colPath, editingId), buildUpdatePayload(floatAmount));
+                const payload = buildUpdatePayload(floatAmount);
+                if (formData.isRecurring) {
+                    payload.recurringTotal = Math.min(parseInt(formData.recurringMonths, 10) || 1, 48);
+                }
+                await updateDoc(doc(colPath, editingId), payload);
 
             } else if (mode === 'this_and_future') {
                 // ── Editar esta e todas as futuras do grupo ──────────────────────
@@ -338,12 +342,17 @@ function App() {
                     t.date >= currentItem.date
                 );
 
+                const allInGroup = transactions.filter(t =>
+                    t.recurringGroupId === currentItem.recurringGroupId
+                );
+
                 const [, , formD] = formData.date.split('-').map(Number);
                 const batch = writeBatch(db);
+                const newTotal = Math.min(parseInt(formData.recurringMonths, 10) || 1, 48);
 
+                // 1. Atualizar itens existentes na série (esta e futuras)
                 related.forEach(item => {
                     const ref = doc(colPath, item.id);
-                    // Preserva mês/ano original, altera só o DIA
                     const [origY, origM] = item.date.split('-').map(Number);
                     const daysInOrigMonth = new Date(origY, origM, 0).getDate();
                     const safeDay = Math.min(formD, daysInOrigMonth);
@@ -356,9 +365,61 @@ function App() {
                         category: formData.category || 'GERAL',
                         accountGroup: formData.accountGroup || 'GERAL',
                         date: newDateStr,
+                        recurringTotal: newTotal,
                         updatedAt: serverTimestamp()
                     });
                 });
+
+                // 2. Atualizar o total nas passadas (que não foram editadas na descrição/valor)
+                allInGroup.forEach(item => {
+                    const isFutureOrCurrent = related.some(r => r.id === item.id);
+                    if (!isFutureOrCurrent) {
+                        batch.update(doc(colPath, item.id), { recurringTotal: newTotal });
+                    }
+                });
+
+                // 3. Adicionar novas parcelas se o total aumentou
+                const maxCurrentIdx = allInGroup.reduce((max, t) => Math.max(max, t.recurringIndex || 0), 0);
+                if (newTotal > maxCurrentIdx) {
+                    const lastItem = allInGroup.reduce((a, b) => ((a.recurringIndex || 0) > (b.recurringIndex || 0) ? a : b), currentItem);
+                    const [lastY, lastM] = lastItem.date.split('-').map(Number);
+
+                    for (let i = maxCurrentIdx + 1; i <= newTotal; i++) {
+                        let targetMonth = lastM + (i - (lastItem.recurringIndex || 0));
+                        let targetYear = lastY;
+                        while (targetMonth > 12) { targetMonth -= 12; targetYear++; }
+
+                        const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+                        const safeDay = Math.min(formD, daysInMonth);
+                        const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+
+                        const newRef = doc(colPath);
+                        batch.set(newRef, {
+                            description: formData.description,
+                            amount: floatAmount,
+                            type: formData.type,
+                            category: formData.category || 'GERAL',
+                            accountGroup: formData.accountGroup || 'GERAL',
+                            date: dateStr,
+                            isPaid: false,
+                            isRecurring: true,
+                            recurringGroupId: currentItem.recurringGroupId,
+                            recurringIndex: i,
+                            recurringTotal: newTotal,
+                            createdAt: serverTimestamp()
+                        });
+                    }
+                }
+
+                // 4. Remover parcelas excedentes se o total diminuiu
+                if (newTotal < maxCurrentIdx) {
+                    allInGroup.forEach(item => {
+                        if ((item.recurringIndex || 0) > newTotal) {
+                            batch.delete(doc(colPath, item.id));
+                        }
+                    });
+                }
+
                 await batch.commit();
 
             } else {
@@ -710,17 +771,19 @@ function App() {
                                     </div>
                                 </div>
 
-                                {editingId ? (
+                                {editingId && !formData.isRecurring ? (
                                     <div className="p-4 rounded border text-center bg-blue-50 border-blue-200">
                                         <p className={`${ui.textBase} font-bold uppercase tracking-widest text-blue-700`}>
-                                            {transactions.find(t => t.id === editingId)?.recurringGroupId ? 'Editando Série Recorrente' : 'Editando Transação Única'}
+                                            Editando Transação Única
                                         </p>
                                     </div>
                                 ) : (
                                     <div className="p-4 bg-slate-50 rounded">
                                         <label className="flex items-center gap-4 cursor-pointer group">
-                                            <input type="checkbox" className="w-5 h-5 text-slate-900 rounded border-slate-300 focus:ring-0" checked={formData.isRecurring} onChange={e => setFormData({ ...formData, isRecurring: e.target.checked })} />
-                                            <span className={`${ui.textBase} font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-800`}>Repetir Próximos Meses</span>
+                                            <input type="checkbox" className="w-5 h-5 text-slate-900 rounded border-slate-300 focus:ring-0" disabled={!!editingId} checked={formData.isRecurring} onChange={e => setFormData({ ...formData, isRecurring: e.target.checked })} />
+                                            <span className={`${ui.textBase} font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-800`}>
+                                                {editingId ? 'Série Recorrente Ativa' : 'Repetir Próximos Meses'}
+                                            </span>
                                         </label>
                                         {formData.isRecurring && (
                                             <div className="mt-4 p-4 bg-white rounded border border-slate-100">
@@ -845,8 +908,8 @@ function App() {
                                                                         accountGroup: t.accountGroup || 'GERAL',
                                                                         date: t.date || getTodayString(),
                                                                         isPaid: t.isPaid || false,
-                                                                        isRecurring: false,
-                                                                        recurringMonths: 1
+                                                                        isRecurring: !!t.recurringGroupId,
+                                                                        recurringMonths: t.recurringTotal || 1
                                                                     });
                                                                     setIsTransactionModalOpen(true);
                                                                 }} className="p-2 text-slate-400 hover:text-slate-900 border border-transparent hover:border-slate-100 rounded transition-all"><Icon name="pencil" className={ui.icon} /></button>
