@@ -20,7 +20,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'familia-51e40';
 
-const VERSION = "4.175";
+const VERSION = "4.176";
 
 // --- Design System ---
 const UI_SIZES = {
@@ -263,118 +263,162 @@ function App() {
     const handlePreSubmit = (e) => {
         e.preventDefault();
         if (editingId) {
+            // Busca o item original para saber se é recorrente
             const item = transactions.find(t => t.id === editingId);
+            if (!item) {
+                alert('Erro: item não encontrado.');
+                return;
+            }
             if (item.recurringGroupId) {
+                // Mostra modal para perguntar: só este ou este e futuros
                 setShowEditStrategy(true);
             } else {
-                processSubmit(false);
+                // Item normal — edita direto
+                processSubmit('single');
             }
         } else {
-            processSubmit();
+            // Novo lançamento
+            processSubmit('new');
         }
     };
 
-    const processSubmit = async (updateFuture = false) => {
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setShowEditStrategy(false);
+        setFormData(prev => ({
+            description: '',
+            amount: '',
+            type: 'expense',
+            category: prev.category || 'GERAL',
+            accountGroup: prev.accountGroup || 'GERAL',
+            date: prev.date || getTodayString(),
+            isPaid: false,
+            isRecurring: false,
+            recurringMonths: 1
+        }));
+    };
+
+    // Campos seguros para atualizar em um item (exclui campos de criação de recorrência)
+    const buildUpdatePayload = (floatAmount) => ({
+        description: formData.description,
+        amount: floatAmount,
+        type: formData.type,
+        category: formData.category || 'GERAL',
+        accountGroup: formData.accountGroup || 'GERAL',
+        date: formData.date,
+        isPaid: formData.isPaid || false,
+        updatedAt: serverTimestamp()
+    });
+
+    // mode: 'new' | 'single' | 'only_this' | 'this_and_future'
+    const processSubmit = async (mode = 'new') => {
         if (!user || !profile || !formData.description || !formData.amount) return;
         const floatAmount = parseFloat(formData.amount);
+        if (isNaN(floatAmount) || floatAmount <= 0) { alert('Valor inválido.'); return; }
         const userKey = profile.username.trim().toLowerCase();
         const colPath = collection(db, 'artifacts', appId, 'users', userKey, 'transactions');
-        const batch = writeBatch(db);
 
         try {
-            if (editingId) {
+            if (mode === 'single') {
+                // ── Edição de item não-recorrente ────────────────────────────────
+                await updateDoc(doc(colPath, editingId), buildUpdatePayload(floatAmount));
+
+            } else if (mode === 'only_this') {
+                // ── Editar apenas esta parcela recorrente ────────────────────────
+                await updateDoc(doc(colPath, editingId), buildUpdatePayload(floatAmount));
+
+            } else if (mode === 'this_and_future') {
+                // ── Editar esta e todas as futuras do grupo ──────────────────────
                 const currentItem = transactions.find(t => t.id === editingId);
+                if (!currentItem) { alert('Erro: item não encontrado.'); return; }
 
-                if (updateFuture && currentItem.recurringGroupId) {
-                    const related = transactions.filter(t =>
-                        t.recurringGroupId === currentItem.recurringGroupId &&
-                        t.date >= currentItem.date
-                    );
+                const related = transactions.filter(t =>
+                    t.recurringGroupId === currentItem.recurringGroupId &&
+                    t.date >= currentItem.date
+                );
 
-                    // CORREÇÃO: Lógica de Atualização de Datas Segura
-                    const [formY, formM, formD] = formData.date.split('-').map(Number);
+                const [, , formD] = formData.date.split('-').map(Number);
+                const batch = writeBatch(db);
 
-                    related.forEach(item => {
-                        const ref = doc(colPath, item.id);
+                related.forEach(item => {
+                    const ref = doc(colPath, item.id);
+                    // Preserva mês/ano original, altera só o DIA
+                    const [origY, origM] = item.date.split('-').map(Number);
+                    const daysInOrigMonth = new Date(origY, origM, 0).getDate();
+                    const safeDay = Math.min(formD, daysInOrigMonth);
+                    const newDateStr = `${origY}-${String(origM).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 
-                        // Preserva o mês e ano original do item, altera apenas o DIA
-                        const [origY, origM] = item.date.split('-').map(Number);
-
-                        // Ajusta o dia para não estourar o mês (ex: dia 31 em Fev vira 28)
-                        const daysInOrigMonth = new Date(origY, origM, 0).getDate();
-                        const safeDay = Math.min(formD, daysInOrigMonth);
-
-                        const newDateStr = `${origY}-${String(origM).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
-
-                        batch.update(ref, {
-                            description: formData.description,
-                            amount: floatAmount,
-                            type: formData.type,
-                            accountGroup: formData.accountGroup,
-                            date: newDateStr, // Data corrigida
-                            updatedAt: serverTimestamp()
-                        });
-                    });
-                    await batch.commit();
-                } else {
-                    await updateDoc(doc(colPath, editingId), {
-                        ...formData,
+                    batch.update(ref, {
+                        description: formData.description,
                         amount: floatAmount,
+                        type: formData.type,
+                        category: formData.category || 'GERAL',
+                        accountGroup: formData.accountGroup || 'GERAL',
+                        date: newDateStr,
                         updatedAt: serverTimestamp()
                     });
-                }
-                setEditingId(null);
-                setShowEditStrategy(false);
+                });
+                await batch.commit();
+
             } else {
+                // ── Novo lançamento ──────────────────────────────────────────────
                 if (formData.isRecurring) {
                     const gid = `rec_${Date.now()}`;
                     const count = Math.min(parseInt(formData.recurringMonths, 10) || 1, 48);
-
-                    // CORREÇÃO: Criação de Recorrência Segura
-                    const [startY, startM, startD] = formData.date.split('-').map(Number); // Ano, Mês (1-12), Dia
+                    const [startY, startM, startD] = formData.date.split('-').map(Number);
+                    const batch = writeBatch(db);
 
                     for (let i = 0; i < count; i++) {
-                        // Calcula o novo mês e ano manualmente para evitar bugs de Date()
                         let targetMonth = startM + i;
                         let targetYear = startY;
+                        while (targetMonth > 12) { targetMonth -= 12; targetYear++; }
 
-                        // Ajuste de virada de ano
-                        while (targetMonth > 12) {
-                            targetMonth -= 12;
-                            targetYear++;
-                        }
-
-                        // Ajuste de dias (ex: dia 31 p/ mês de 30 dias)
                         const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
                         const safeDay = Math.min(startD, daysInMonth);
-
                         const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
 
                         const newRef = doc(colPath);
                         batch.set(newRef, {
-                            ...formData,
                             description: formData.description,
-                            date: dateStr,
                             amount: floatAmount,
+                            type: formData.type,
+                            category: formData.category || 'GERAL',
+                            accountGroup: formData.accountGroup || 'GERAL',
+                            date: dateStr,
+                            isPaid: false,
+                            isRecurring: true,
                             recurringGroupId: gid,
-                            recurringIndex: i + 1,        // parcela atual (1-based)
-                            recurringTotal: count,         // total de parcelas
+                            recurringIndex: i + 1,
+                            recurringTotal: count,
                             createdAt: serverTimestamp()
                         });
                     }
                     await batch.commit();
                 } else {
-                    await addDoc(colPath, { ...formData, amount: floatAmount, createdAt: serverTimestamp() });
+                    await addDoc(colPath, {
+                        description: formData.description,
+                        amount: floatAmount,
+                        type: formData.type,
+                        category: formData.category || 'GERAL',
+                        accountGroup: formData.accountGroup || 'GERAL',
+                        date: formData.date,
+                        isPaid: formData.isPaid || false,
+                        isRecurring: false,
+                        createdAt: serverTimestamp()
+                    });
                 }
             }
 
+            // Limpa estado após qualquer operação bem-sucedida
+            setEditingId(null);
+            setShowEditStrategy(false);
             setFormData(prev => ({
                 description: '',
                 amount: '',
                 type: 'expense',
                 category: 'GERAL',
-                accountGroup: prev.accountGroup,
-                date: prev.date, // Mantém a data para agilidade
+                accountGroup: prev.accountGroup || 'GERAL',
+                date: prev.date || getTodayString(),
                 isPaid: false,
                 isRecurring: false,
                 recurringMonths: 1
@@ -384,7 +428,7 @@ function App() {
             setTimeout(() => setStatusMessage(''), 2500);
             if (descriptionInputRef.current) descriptionInputRef.current.focus();
 
-        } catch (err) { console.error(err); alert("Erro ao salvar."); }
+        } catch (err) { console.error('Erro ao salvar:', err); alert('Erro ao salvar: ' + err.message); }
     };
 
     const handleDeleteClick = (t) => {
@@ -519,8 +563,8 @@ function App() {
 
     return (
         <div className={`max-w-[1600px] mx-auto p-4 ${ui.id === 'sm' ? 'md:p-4' : 'md:p-12'} ${ui.colGap} min-h-screen bg-slate-50 font-sans text-slate-700`}>
-            <ActionModal isOpen={showEditStrategy} title="Editar Recorrência" onClose={() => setShowEditStrategy(false)} textOne="Apenas Esta" onOptionOne={() => processSubmit(false)} textTwo="Esta e Futuras" onOptionTwo={() => processSubmit(true)} ui={ui} />
-            <ActionModal isOpen={showDeleteStrategy} title="Apagar Recorrência" onClose={() => setShowDeleteStrategy(false)} textOne="Apenas Esta" onOptionOne={() => deleteItem(deletingId, false).catch(() => { })} textTwo="Esta e Futuras" onOptionTwo={() => deleteItem(deletingId, true).catch(() => { })} ui={ui} />
+            <ActionModal isOpen={showEditStrategy} title="Editar Recorrência" onClose={() => { setShowEditStrategy(false); }} textOne="Apenas Esta" onOptionOne={() => processSubmit('only_this')} textTwo="Esta e Futuras" onOptionTwo={() => processSubmit('this_and_future')} ui={ui} />
+            <ActionModal isOpen={showDeleteStrategy} title="Apagar Recorrência" onClose={() => { setShowDeleteStrategy(false); setDeletingId(null); }} textOne="Apenas Esta" onOptionOne={() => deleteItem(deletingId, false).catch(() => { })} textTwo="Esta e Futuras" onOptionTwo={() => deleteItem(deletingId, true).catch(() => { })} ui={ui} />
 
             <header className="flex flex-col md:flex-row justify-between items-center gap-8">
                 <div className="flex items-center gap-6">
@@ -641,8 +685,10 @@ function App() {
 
                             {editingId ? (
                                 <div className="pt-4 border-t border-slate-50">
-                                    <div className="p-4 bg-amber-50 rounded border border-amber-200 text-center">
-                                        <p className={`${ui.textBase} font-bold text-amber-700 uppercase tracking-widest`}>Editando Recorrência</p>
+                                    <div className={`p-4 rounded border text-center ${transactions.find(t => t.id === editingId)?.recurringGroupId ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
+                                        <p className={`${ui.textBase} font-bold uppercase tracking-widest ${transactions.find(t => t.id === editingId)?.recurringGroupId ? 'text-amber-700' : 'text-blue-700'}`}>
+                                            {transactions.find(t => t.id === editingId)?.recurringGroupId ? 'Editando Conta Recorrente' : 'Editando Lançamento'}
+                                        </p>
                                     </div>
                                 </div>
                             ) : (
@@ -664,7 +710,7 @@ function App() {
                                 <button type="submit" className={`w-full ${ui.btnPad} bg-slate-900 text-white font-bold uppercase ${ui.textBase} tracking-widest hover:bg-slate-800 transition-all shadow-md`}>
                                     {editingId ? "Atualizar" : "Salvar"}
                                 </button>
-                                {editingId && <button type="button" onClick={() => setEditingId(null)} className={`w-full ${ui.textBase} font-bold text-slate-400 uppercase pt-4 text-center hover:text-slate-900`}>Cancelar</button>}
+                                {editingId && <button type="button" onClick={handleCancelEdit} className={`w-full ${ui.textBase} font-bold text-slate-400 uppercase pt-4 text-center hover:text-slate-900`}>Cancelar</button>}
                             </div>
                         </form>
                     </div>
@@ -761,7 +807,22 @@ function App() {
                                                         <td className={`p-4 text-right font-bold ${ui.textXl} ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>{formatBRL(t.amount)}</td>
                                                         <td className="p-4 w-32 text-center">
                                                             <div className="flex justify-center gap-4">
-                                                                <button onClick={() => { setEditingId(t.id); setFormData({ ...t }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="p-2 text-slate-400 hover:text-slate-900 border border-transparent hover:border-slate-100 rounded transition-all"><Icon name="pencil" className={ui.icon} /></button>
+                                                                <button onClick={() => {
+                                                                    setEditingId(t.id);
+                                                                    // Preenche o formulário apenas com campos editáveis (NÃO copia recurringGroupId, recurringIndex, etc.)
+                                                                    setFormData({
+                                                                        description: t.description || '',
+                                                                        amount: t.amount ? String(t.amount) : '',
+                                                                        type: t.type || 'expense',
+                                                                        category: t.category || 'GERAL',
+                                                                        accountGroup: t.accountGroup || 'GERAL',
+                                                                        date: t.date || getTodayString(),
+                                                                        isPaid: t.isPaid || false,
+                                                                        isRecurring: false,
+                                                                        recurringMonths: 1
+                                                                    });
+                                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                                }} className="p-2 text-slate-400 hover:text-slate-900 border border-transparent hover:border-slate-100 rounded transition-all"><Icon name="pencil" className={ui.icon} /></button>
                                                                 <button onClick={() => handleDeleteClick(t)} className="p-2 text-slate-400 hover:text-red-600 border border-transparent hover:border-red-50 rounded transition-all"><Icon name="trash" className={ui.icon} /></button>
                                                             </div>
                                                         </td>
