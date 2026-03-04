@@ -20,7 +20,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'familia-51e40';
 
-const VERSION = "4.176";
+const VERSION = "4.177";
 
 // --- Design System ---
 const UI_SIZES = {
@@ -98,6 +98,7 @@ function App() {
     const [currentWorkMonth, setCurrentWorkMonth] = useState(new Date());
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
+    const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
 
     // Estado inicial com data segura (string YYYY-MM-DD)
     const getTodayString = () => {
@@ -425,6 +426,7 @@ function App() {
             }));
 
             setStatusMessage('SALVO');
+            setIsTransactionModalOpen(false);
             setTimeout(() => setStatusMessage(''), 2500);
             if (descriptionInputRef.current) descriptionInputRef.current.focus();
 
@@ -566,7 +568,17 @@ function App() {
             <ActionModal isOpen={showEditStrategy} title="Editar Recorrência" onClose={() => { setShowEditStrategy(false); }} textOne="Apenas Esta" onOptionOne={() => processSubmit('only_this')} textTwo="Esta e Futuras" onOptionTwo={() => processSubmit('this_and_future')} ui={ui} />
             <ActionModal isOpen={showDeleteStrategy} title="Apagar Recorrência" onClose={() => { setShowDeleteStrategy(false); setDeletingId(null); }} textOne="Apenas Esta" onOptionOne={() => deleteItem(deletingId, false).catch(() => { })} textTwo="Esta e Futuras" onOptionTwo={() => deleteItem(deletingId, true).catch(() => { })} ui={ui} />
 
-            <header className="flex flex-col md:flex-row justify-between items-center gap-8">
+            {/* BOTÃO FLUTUANTE (MOBILE) / HEADER (DESKTOP) */}
+            <div className="fixed bottom-6 right-6 z-40 lg:hidden">
+                <button
+                    onClick={() => { handleCancelEdit(); setIsTransactionModalOpen(true); }}
+                    className="w-16 h-16 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+                >
+                    <Icon name="plus" className="w-8 h-8" />
+                </button>
+            </div>
+
+            <header className="flex flex-col md:flex-row justify-between items-center gap-8 mb-8">
                 <div className="flex items-center gap-6">
                     <div className={`${ui.cardPad} bg-slate-900 rounded text-white shadow-md`}><Icon name="wallet" className={ui.iconLg} /></div>
                     <div>
@@ -578,27 +590,27 @@ function App() {
                     </div>
                 </div>
 
-                {/* SELETOR DE TAMANHO DA UI */}
-                <div className="flex items-center bg-white p-1 rounded-lg border border-slate-200 shadow-sm gap-1">
-                    {Object.keys(UI_SIZES).map(key => (
-                        <button
-                            key={key}
-                            onClick={() => changeUiSize(key)}
-                            className={`w-8 h-8 flex items-center justify-center rounded text-[10px] font-bold uppercase transition-all ${uiSize === key ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-50'}`}
-                            title={`Tamanho ${UI_SIZES[key].label}`}
-                        >
-                            {key.toUpperCase()}
-                        </button>
-                    ))}
-                </div>
+                <div className="flex flex-wrap items-center justify-center gap-4">
+                    <button
+                        onClick={() => { handleCancelEdit(); setIsTransactionModalOpen(true); }}
+                        className={`hidden lg:flex items-center gap-3 px-6 ${ui.btnPad} bg-slate-900 text-white font-bold uppercase ${ui.textBase} tracking-widest rounded-full hover:bg-slate-800 transition-all shadow-lg hover:-translate-y-0.5`}
+                    >
+                        <Icon name="plus" className={ui.icon} />
+                        Lançar Despesa
+                    </button>
 
-                <div className="flex items-center gap-4">
-                    {statusMessage && (
-                        <div className={`flex items-center gap-2 ${ui.inputPad} bg-emerald-100 text-emerald-700 rounded border border-emerald-200 animate-in fade-in slide-in-from-right-4 duration-300`}>
-                            <Icon name="check" className={ui.icon} />
-                            <span className={`${ui.textBase} font-black uppercase tracking-widest`}>{statusMessage}</span>
-                        </div>
-                    )}
+                    <div className="flex items-center bg-white p-1 rounded-lg border border-slate-200 shadow-sm gap-1">
+                        {Object.keys(UI_SIZES).map(key => (
+                            <button
+                                key={key}
+                                onClick={() => changeUiSize(key)}
+                                className={`w-8 h-8 flex items-center justify-center rounded text-[10px] font-bold uppercase transition-all ${uiSize === key ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-50'}`}
+                                title={`Tamanho ${UI_SIZES[key].label}`}
+                            >
+                                {key.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
 
                     <div className={`flex items-center bg-white ${ui.inputPad} rounded border border-slate-200 shadow-sm`}>
                         <button onClick={() => setCurrentWorkMonth(new Date(currentWorkMonth.getFullYear(), currentWorkMonth.getMonth() - 1, 1))} className={`${ui.btnPad} text-slate-400 hover:text-slate-900 ${ui.icon}`}><Icon name="left" className={ui.icon} /></button>
@@ -617,14 +629,14 @@ function App() {
                 </div>
             </header>
 
-            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 ${ui.gap}`}>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 ${ui.gap} mb-12`}>
                 {[
                     { label: 'Saldo Mensal', value: totals.balance, color: totals.balance >= 0 ? 'text-slate-900' : 'text-red-600' },
                     { label: 'Receitas Totais', value: totals.income, color: 'text-emerald-600' },
                     { label: 'Pendentes', value: totals.pending, color: 'text-red-600' },
                     { label: 'Liquidados', value: totals.paid, color: 'text-slate-400' }
                 ].map((card, i) => (
-                    <div key={i} className={`bg-white ${ui.cardPad} ${ui.radius} border border-slate-200 shadow-sm transition-all hover:bg-white/80 overflow-hidden flex flex-col justify-between min-h-[100px]`}>
+                    <div key={i} className={`bg-white ${ui.cardPad} ${ui.radius} border border-slate-200 shadow-sm transition-all hover:shadow-md hover:bg-white/80 overflow-hidden flex flex-col justify-between min-h-[120px]`}>
                         <span className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>{card.label}</span>
                         <div className={`font-bold mt-2 break-words leading-tight ${card.color} ${ui.text2xl}`}>
                             {formatBRL(card.value)}
@@ -633,90 +645,106 @@ function App() {
                 ))}
             </div>
 
-            <div className={`grid grid-cols-1 lg:grid-cols-12 ${ui.colGap}`}>
-                <div className="lg:col-span-4">
-                    <div className={`bg-white ${ui.cardPad} ${ui.radius} border border-slate-200 sticky top-12 shadow-sm`}>
-                        <h2 className={`${ui.textBase} font-bold uppercase tracking-[0.3em] mb-4 text-slate-900 border-b border-slate-100 pb-4 text-center`}>Lançamento</h2>
-                        <form onSubmit={handlePreSubmit} className={`space-y-${ui.id === 'sm' ? '3' : '8'}`}>
-                            <div>
-                                <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Descrição</label>
-                                <input
-                                    ref={descriptionInputRef}
-                                    type="text"
-                                    required
-                                    placeholder="EX: ALUGUEL"
-                                    className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textLg} font-medium outline-none focus:ring-1 focus:ring-slate-300`}
-                                    value={formData.description}
-                                    onChange={handleDescriptionChange}
-                                />
-                            </div>
-                            <div>
-                                <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Montante (R$)</label>
-                                <input type="text" required placeholder="0,00" className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textXl} font-bold text-slate-900 outline-none`} value={formatCurrencyDisplay(formData.amount)} onChange={handleAmountChange} />
-                            </div>
+            {/* MODAL DE LANÇAMENTO */}
+            {isTransactionModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className={`bg-white ${ui.radius} shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in duration-300`}>
+                        <div className="p-6 bg-slate-900 flex justify-between items-center text-white">
+                            <h2 className={`${ui.textBase} font-bold uppercase tracking-[0.3em]`}>{editingId ? "Editar Lançamento" : "Novo Lançamento"}</h2>
+                            <button onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }} className="hover:rotate-90 transition-all p-2 opacity-60 hover:opacity-100">
+                                <Icon name="x" className="w-6 h-6" />
+                            </button>
+                        </div>
 
-                            <div>
-                                <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Grupo de Contas</label>
-                                <div className="flex gap-2 mt-2">
-                                    {!isCreatingGroup ? (
-                                        <Fragment>
-                                            <select className={`w-full ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase cursor-pointer`} value={formData.accountGroup} onChange={e => setFormData({ ...formData, accountGroup: e.target.value })}>
-                                                {groups.map(g => <option key={g} value={g}>{g}</option>)}
-                                            </select>
-                                            <button type="button" onClick={() => setIsCreatingGroup(true)} className={`${ui.btnPad} bg-slate-900 text-white rounded hover:bg-slate-800`}><Icon name="plus" className={ui.icon} /></button>
-                                        </Fragment>
-                                    ) : (
-                                        <Fragment>
-                                            <input type="text" autoFocus placeholder="NOVO GRUPO..." className={`w-full ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase`} value={newGroupName} onChange={e => setNewGroupName(e.target.value.toUpperCase())} />
-                                            <button type="button" onClick={handleCreateGroup} className={`${ui.btnPad} bg-emerald-600 text-white rounded hover:bg-emerald-700`}><Icon name="check" className={ui.icon} /></button>
-                                            <button type="button" onClick={() => setIsCreatingGroup(false)} className={`${ui.btnPad} bg-slate-200 text-slate-600 rounded hover:bg-slate-300`}><Icon name="x" className={ui.icon} /></button>
-                                        </Fragment>
-                                    )}
+                        <div className={`p-8 ${ui.gap} max-h-[85vh] overflow-y-auto`}>
+                            <form onSubmit={(e) => { e.preventDefault(); handlePreSubmit(e); }} className="space-y-6">
+                                <div>
+                                    <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Descrição</label>
+                                    <input
+                                        ref={descriptionInputRef}
+                                        type="text"
+                                        required
+                                        placeholder="EX: ALUGUEL"
+                                        className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textLg} font-medium outline-none focus:ring-1 focus:ring-slate-300 rounded`}
+                                        value={formData.description}
+                                        onChange={handleDescriptionChange}
+                                    />
                                 </div>
-                            </div>
-
-                            <div className={`grid grid-cols-2 ${ui.gap}`}>
-                                <select className={`${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase`} value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
-                                    <option value="expense">Despesa</option>
-                                    <option value="income">Receita</option>
-                                </select>
-                                <input type="date" className={`${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold`} value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
-                            </div>
-
-                            {editingId ? (
-                                <div className="pt-4 border-t border-slate-50">
-                                    <div className={`p-4 rounded border text-center ${transactions.find(t => t.id === editingId)?.recurringGroupId ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
-                                        <p className={`${ui.textBase} font-bold uppercase tracking-widest ${transactions.find(t => t.id === editingId)?.recurringGroupId ? 'text-amber-700' : 'text-blue-700'}`}>
-                                            {transactions.find(t => t.id === editingId)?.recurringGroupId ? 'Editando Conta Recorrente' : 'Editando Lançamento'}
-                                        </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Montante (R$)</label>
+                                        <input type="text" required placeholder="0,00" className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textXl} font-bold text-slate-900 outline-none rounded`} value={formatCurrencyDisplay(formData.amount)} onChange={handleAmountChange} />
+                                    </div>
+                                    <div>
+                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Data</label>
+                                        <input type="date" className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold outline-none rounded`} value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="pt-4 border-t border-slate-50">
-                                    <label className="flex items-center gap-4 cursor-pointer group">
-                                        <input type="checkbox" className="w-5 h-5 text-slate-900 rounded border-slate-300 focus:ring-0" checked={formData.isRecurring} onChange={e => setFormData({ ...formData, isRecurring: e.target.checked })} />
-                                        <span className={`${ui.textBase} font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-800 transition-all`}>Conta Recorrente</span>
-                                    </label>
-                                    {formData.isRecurring && (
-                                        <div className="mt-4 p-6 bg-slate-50 rounded animate-in fade-in duration-300">
-                                            <label className={`${ui.textBase} font-bold text-slate-400 uppercase block mb-3 text-center tracking-widest`}>Duração: {formData.recurringMonths} meses</label>
-                                            <input type="range" min="1" max="48" className="w-full accent-slate-900" value={formData.recurringMonths} onChange={e => setFormData({ ...formData, recurringMonths: parseInt(e.target.value, 10) })} />
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
-                            <div className="space-y-4 pt-4">
-                                <button type="submit" className={`w-full ${ui.btnPad} bg-slate-900 text-white font-bold uppercase ${ui.textBase} tracking-widest hover:bg-slate-800 transition-all shadow-md`}>
-                                    {editingId ? "Atualizar" : "Salvar"}
-                                </button>
-                                {editingId && <button type="button" onClick={handleCancelEdit} className={`w-full ${ui.textBase} font-bold text-slate-400 uppercase pt-4 text-center hover:text-slate-900`}>Cancelar</button>}
-                            </div>
-                        </form>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Grupo</label>
+                                        <div className="flex gap-2 mt-2">
+                                            {!isCreatingGroup ? (
+                                                <Fragment>
+                                                    <select className={`w-full ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase cursor-pointer rounded`} value={formData.accountGroup} onChange={e => setFormData({ ...formData, accountGroup: e.target.value })}>
+                                                        {groups.map(g => <option key={g} value={g}>{g}</option>)}
+                                                    </select>
+                                                    <button type="button" onClick={() => setIsCreatingGroup(true)} className={`${ui.btnPad} bg-slate-900 text-white rounded hover:bg-slate-800`}><Icon name="plus" className={ui.icon} /></button>
+                                                </Fragment>
+                                            ) : (
+                                                <Fragment>
+                                                    <input type="text" autoFocus placeholder="NOVO GRUPO..." className={`w-full ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase rounded`} value={newGroupName} onChange={e => setNewGroupName(e.target.value.toUpperCase())} />
+                                                    <button type="button" onClick={handleCreateGroup} className={`${ui.btnPad} bg-emerald-600 text-white rounded hover:bg-emerald-700`}><Icon name="check" className={ui.icon} /></button>
+                                                    <button type="button" onClick={() => setIsCreatingGroup(false)} className={`${ui.btnPad} bg-slate-200 text-slate-600 rounded hover:bg-slate-300`}><Icon name="x" className={ui.icon} /></button>
+                                                </Fragment>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Tipo</label>
+                                        <select className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase outline-none rounded`} value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
+                                            <option value="expense">Despesa</option>
+                                            <option value="income">Receita</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {editingId ? (
+                                    <div className="p-4 rounded border text-center bg-blue-50 border-blue-200">
+                                        <p className={`${ui.textBase} font-bold uppercase tracking-widest text-blue-700`}>
+                                            {transactions.find(t => t.id === editingId)?.recurringGroupId ? 'Editando Série Recorrente' : 'Editando Transação Única'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 bg-slate-50 rounded">
+                                        <label className="flex items-center gap-4 cursor-pointer group">
+                                            <input type="checkbox" className="w-5 h-5 text-slate-900 rounded border-slate-300 focus:ring-0" checked={formData.isRecurring} onChange={e => setFormData({ ...formData, isRecurring: e.target.checked })} />
+                                            <span className={`${ui.textBase} font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-800`}>Repetir Próximos Meses</span>
+                                        </label>
+                                        {formData.isRecurring && (
+                                            <div className="mt-4 p-4 bg-white rounded border border-slate-100">
+                                                <label className={`${ui.textBase} font-bold text-slate-400 uppercase block mb-3 text-center tracking-widest`}>Duração: {formData.recurringMonths} meses</label>
+                                                <input type="range" min="1" max="48" className="w-full accent-slate-900" value={formData.recurringMonths} onChange={e => setFormData({ ...formData, recurringMonths: parseInt(e.target.value, 10) })} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-4 pt-4">
+                                    <button type="button" onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }} className={`flex-1 ${ui.btnPad} border border-slate-200 text-slate-400 font-bold uppercase ${ui.textBase} tracking-widest rounded-lg hover:bg-slate-50 transition-all`}>Cancelar</button>
+                                    <button type="submit" className={`flex-[2] ${ui.btnPad} bg-slate-900 text-white font-bold uppercase ${ui.textBase} tracking-widest rounded-lg hover:bg-slate-800 transition-all shadow-lg`}>
+                                        {editingId ? "Confirmar Atualização" : "Lançar Agora"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
+            )}
 
-                <div className={`lg:col-span-8 space-y-${ui.id === 'sm' ? '6' : '12'}`}>
+            <div className={`grid grid-cols-1 ${ui.colGap}`}>
+                <div className="space-y-8">
                     <div className={`flex overflow-x-auto pb-6 ${ui.gap} snap-x no-scrollbar scroll-smooth`}>
                         {nextTwelveMonths.map((mDate, idx) => {
                             const isSel = mDate.getMonth() === currentWorkMonth.getMonth() && mDate.getFullYear() === currentWorkMonth.getFullYear();
@@ -809,7 +837,6 @@ function App() {
                                                             <div className="flex justify-center gap-4">
                                                                 <button onClick={() => {
                                                                     setEditingId(t.id);
-                                                                    // Preenche o formulário apenas com campos editáveis (NÃO copia recurringGroupId, recurringIndex, etc.)
                                                                     setFormData({
                                                                         description: t.description || '',
                                                                         amount: t.amount ? String(t.amount) : '',
@@ -821,7 +848,7 @@ function App() {
                                                                         isRecurring: false,
                                                                         recurringMonths: 1
                                                                     });
-                                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                                    setIsTransactionModalOpen(true);
                                                                 }} className="p-2 text-slate-400 hover:text-slate-900 border border-transparent hover:border-slate-100 rounded transition-all"><Icon name="pencil" className={ui.icon} /></button>
                                                                 <button onClick={() => handleDeleteClick(t)} className="p-2 text-slate-400 hover:text-red-600 border border-transparent hover:border-red-50 rounded transition-all"><Icon name="trash" className={ui.icon} /></button>
                                                             </div>
