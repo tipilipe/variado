@@ -1172,7 +1172,7 @@ function App() {
                     </div>
 
                     <div className={`bg-white ${ui.radius} border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[850px]`}>
-                        <div className={`p-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center bg-white sticky top-0 z-20 ${ui.gap}`}>
+                        <div className={`p-5 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center bg-white sticky top-0 z-20 ${ui.gap}`}>
                             <div className="flex items-center gap-6">
                                 <h3 className={`${ui.textBase} font-bold uppercase tracking-[0.3em] text-slate-900`}>Extrato Consolidado</h3>
                                 <div className="flex gap-2">
@@ -1193,7 +1193,7 @@ function App() {
                             ) : (
                                 Object.keys(groupedList).map(groupName => (
                                     <div key={groupName} className="border-b border-slate-100">
-                                        <div className={`bg-slate-50 p-4 px-8 flex justify-between items-center sticky top-0 z-10`}>
+                                        <div className={`bg-slate-50 p-3 px-6 sm:p-4 sm:px-8 flex justify-between items-center sticky top-0 z-10`}>
                                             <span className={`${ui.textBase} font-black uppercase tracking-widest text-slate-500 flex items-center gap-2`}>
                                                 <Icon name="layer" className={ui.icon} /> {groupName}
                                             </span>
@@ -1201,56 +1201,61 @@ function App() {
                                                 {formatBRL(groupedList[groupName].total)}
                                             </span>
                                         </div>
-                                        <table className="w-full text-left border-collapse">
-                                            <tbody className="divide-y divide-slate-100">
-                                                {groupedList[groupName].items.map(t => (
-                                                    <tr key={t.id} className={`group hover:bg-slate-50/50 transition-all ${editingId === t.id ? 'bg-amber-50/50' : ''}`}>
-                                                        <td className={`p-4 w-24 text-center ${ui.textBase}`}>
-                                                            <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'users', profile.username.trim().toLowerCase(), 'transactions', t.id), { isPaid: !t.isPaid })} className={`flex flex-col items-center mx-auto transition-all active:scale-90 ${t.isPaid ? 'text-emerald-600' : 'text-slate-300 hover:text-slate-500'}`}>
-                                                                <Icon name={t.isPaid ? "check" : "circle"} className={`${ui.iconLg} shadow-sm`} />
-                                                                <span className="text-[7px] font-bold uppercase mt-1 tracking-widest">{t.isPaid ? 'Pago' : 'Aberto'}</span>
-                                                            </button>
-                                                        </td>
-                                                        <td className={`p-4 ${ui.textBase}`}>
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`${ui.textLg} font-bold text-slate-900 uppercase tracking-tighter truncate max-w-[200px]`}>{t.description}</div>
-                                                                {t.recurringGroupId && <Icon name="repeat" className={`${ui.icon} text-slate-300`} />}
-                                                            </div>
-                                                            <div className={`${ui.textBase} text-slate-400 font-bold uppercase mt-1 flex items-center gap-2 tracking-widest`}>
-                                                                {formatDateDisplay(t.date)}
-                                                                {t.recurringGroupId && t.recurringIndex && (
-                                                                    <span className="text-[10px] font-black bg-slate-900/5 text-slate-500 px-2 py-0.5 rounded border border-slate-100 flex items-center gap-1">
-                                                                        <Icon name="repeat" className="w-2 h-2 opacity-40" />
-                                                                        PARCELA {t.recurringIndex}/{t.recurringTotal || '?'}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td className={`p-4 text-right font-bold ${ui.textXl} ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>{formatBRL(t.amount)}</td>
-                                                        <td className="p-4 w-32 text-center">
-                                                            <div className="flex justify-center gap-4">
-                                                                <button onClick={() => {
-                                                                    setEditingId(t.id);
-                                                                    setFormData({
-                                                                        description: t.description || '',
-                                                                        amount: t.amount ? String(t.amount) : '',
-                                                                        type: t.type || 'expense',
-                                                                        category: t.category || 'GERAL',
-                                                                        accountGroup: t.accountGroup || 'GERAL',
-                                                                        date: t.date || getTodayString(),
-                                                                        isPaid: t.isPaid || false,
-                                                                        isRecurring: !!t.recurringGroupId,
-                                                                        recurringMonths: t.recurringTotal || 1
-                                                                    });
-                                                                    setIsTransactionModalOpen(true);
-                                                                }} className="p-2 text-slate-400 hover:text-slate-900 border border-transparent hover:border-slate-100 rounded transition-all"><Icon name="pencil" className={ui.icon} /></button>
-                                                                <button onClick={() => handleDeleteClick(t)} className="p-2 text-slate-400 hover:text-red-600 border border-transparent hover:border-red-50 rounded transition-all"><Icon name="trash" className={ui.icon} /></button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                        <div className="divide-y divide-slate-100">
+                                            {groupedList[groupName].items.map(t => (
+                                                <div key={t.id} className={`p-4 px-4 sm:px-8 group hover:bg-slate-50/50 transition-all flex items-center gap-3 sm:gap-6 ${editingId === t.id ? 'bg-amber-50/50' : ''}`}>
+                                                    {/* Status Icon */}
+                                                    <div className="flex-shrink-0 w-10 sm:w-14 text-center">
+                                                        <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'users', profile.username.trim().toLowerCase(), 'transactions', t.id), { isPaid: !t.isPaid })} className={`flex flex-col items-center mx-auto transition-all active:scale-90 ${t.isPaid ? 'text-emerald-600' : 'text-slate-300 hover:text-slate-500'}`}>
+                                                            <Icon name={t.isPaid ? "check" : "circle"} className={`${ui.iconLg} shadow-sm`} />
+                                                            <span className="text-[7px] font-bold uppercase mt-1 tracking-widest leading-none">{t.isPaid ? 'Pago' : 'Aberto'}</span>
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Transaction Details */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`${ui.textBase} font-bold text-slate-900 uppercase truncate leading-tight`}>{t.description}</div>
+                                                            {t.recurringGroupId && <Icon name="repeat" className={`${ui.icon} text-slate-300 flex-shrink-0`} />}
+                                                        </div>
+                                                        <div className={`${ui.textBase} text-slate-400 font-bold uppercase mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 tracking-widest`}>
+                                                            <span className="text-[9px] sm:text-[10px] opacity-70">{formatDateDisplay(t.date)}</span>
+                                                            {t.recurringGroupId && t.recurringIndex && (
+                                                                <span className="text-[8px] sm:text-[9px] font-black bg-slate-900/5 text-slate-500 px-1.5 py-0.5 rounded border border-slate-100 flex items-center gap-1 whitespace-nowrap">
+                                                                    <Icon name="repeat" className="w-1.5 h-1.5 sm:w-2 sm:h-2 opacity-40" />
+                                                                    {t.recurringIndex}/{t.recurringTotal || '?'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Amount and Actions Wrapper (for better mobile grouping if needed, but flex-row is usually OK with min-w-0) */}
+                                                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-6">
+                                                        <div className={`text-right font-bold ${ui.textBase} sm:${ui.textXl} ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'} whitespace-nowrap`}>
+                                                            {formatBRL(t.amount)}
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => {
+                                                                setEditingId(t.id);
+                                                                setFormData({
+                                                                    description: t.description || '',
+                                                                    amount: t.amount ? String(t.amount) : '',
+                                                                    type: t.type || 'expense',
+                                                                    category: t.category || 'GERAL',
+                                                                    accountGroup: t.accountGroup || 'GERAL',
+                                                                    date: t.date || getTodayString(),
+                                                                    isPaid: t.isPaid || false,
+                                                                    isRecurring: !!t.recurringGroupId,
+                                                                    recurringMonths: t.recurringTotal || 1
+                                                                });
+                                                                setIsTransactionModalOpen(true);
+                                                            }} className="p-1.5 text-slate-400 hover:text-slate-900 rounded transition-all"><Icon name="pencil" className={ui.icon} /></button>
+                                                            <button onClick={() => handleDeleteClick(t)} className="p-1.5 text-slate-400 hover:text-red-600 rounded transition-all"><Icon name="trash" className={ui.icon} /></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 ))
                             )}
