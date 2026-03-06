@@ -20,7 +20,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'familia-51e40';
 
-const VERSION = "4.177";
+const VERSION = "5.200";
 
 // --- Design System ---
 const UI_SIZES = {
@@ -60,14 +60,162 @@ const Icon = ({ name, className = "" }) => {
 const ActionModal = ({ isOpen, title, onClose, onOptionOne, onOptionTwo, textOne, textTwo, ui }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
-            <div className={`bg-white ${ui.radius} ${ui.cardPad} w-full max-w-sm shadow-2xl animate-in fade-in zoom-in duration-200`}>
-                <h3 className={`${ui.textBase} font-bold uppercase tracking-widest text-slate-900 mb-6 text-center`}>{title}</h3>
-                <div className={`flex flex-col ${ui.gap}`}>
-                    <button onClick={onOptionOne} className={`w-full ${ui.btnPad} bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold uppercase ${ui.textBase} tracking-widest ${ui.radius} transition-all`}>{textOne}</button>
-                    <button onClick={onOptionTwo} className={`w-full ${ui.btnPad} bg-slate-900 text-white font-bold uppercase ${ui.textBase} tracking-widest ${ui.radius} hover:bg-slate-800 transition-all`}>{textTwo}</button>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(8px)', animation: 'modalOverlayIn 0.15s ease-out' }}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden" style={{ animation: 'modalFadeIn 0.25s ease-out' }}>
+                <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, #0f172a, #1e293b, #334155)' }}></div>
+                <div className="p-8">
+                    <h3 className="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-800 mb-6 text-center">{title}</h3>
+                    <div className="flex flex-col gap-3">
+                        <button onClick={onOptionOne} className="w-full py-3.5 px-4 btn-ghost rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                            {textOne}
+                        </button>
+                        <button onClick={onOptionTwo} className="w-full py-3.5 px-4 btn-primary-gradient rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                            {textTwo}
+                        </button>
+                    </div>
+                    <button onClick={onClose} className="w-full mt-5 text-center text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors py-2">
+                        Cancelar
+                    </button>
                 </div>
-                <button onClick={onClose} className={`w-full mt-4 text-center ${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Cancelar</button>
+            </div>
+        </div>
+    );
+};
+
+const WheelPicker = ({ value, onChange, min = 1, max = 48 }) => {
+    const [rotation, setRotation] = useState(-(value - min) * 70);
+    const isDragging = useRef(false);
+    const lastY = useRef(0);
+    const velocity = useRef(0);
+    const rafId = useRef(null);
+    const itemHeight = 70;
+
+    const triggerHaptic = () => {
+        if ("vibrate" in navigator) navigator.vibrate(10);
+    };
+
+    const updateInternalValue = (newRotation) => {
+        const selectedIndex = Math.round(-newRotation / itemHeight);
+        const newValue = Math.max(min, Math.min(max, selectedIndex + min));
+        if (newValue !== value) {
+            triggerHaptic();
+            onChange(newValue);
+        }
+    };
+
+    const snapToClosest = (current) => {
+        const minScroll = -(max - min) * itemHeight;
+        const maxScroll = 0;
+        let target = Math.max(minScroll, Math.min(maxScroll, current));
+        target = Math.round(target / itemHeight) * itemHeight;
+
+        const animate = () => {
+            setRotation(prev => {
+                const diff = target - prev;
+                if (Math.abs(diff) < 0.1) {
+                    cancelAnimationFrame(rafId.current);
+                    return target;
+                }
+                const next = prev + diff * 0.2;
+                updateInternalValue(next);
+                rafId.current = requestAnimationFrame(animate);
+                return next;
+            });
+        };
+        animate();
+    };
+
+    const applyInertia = () => {
+        setRotation(prev => {
+            const next = prev + velocity.current;
+            velocity.current *= 0.94;
+            if (Math.abs(velocity.current) < 0.2) {
+                snapToClosest(next);
+                return next;
+            }
+            updateInternalValue(next);
+            rafId.current = requestAnimationFrame(applyInertia);
+            return next;
+        });
+    };
+
+    const handleStart = (pageY) => {
+        isDragging.current = true;
+        lastY.current = pageY;
+        velocity.current = 0;
+        cancelAnimationFrame(rafId.current);
+    };
+
+    const handleMove = (pageY) => {
+        if (!isDragging.current) return;
+        const deltaY = pageY - lastY.current;
+        velocity.current = deltaY;
+        lastY.current = pageY;
+        setRotation(prev => {
+            const next = prev + deltaY;
+            updateInternalValue(next);
+            return next;
+        });
+    };
+
+    const handleEnd = () => {
+        if (!isDragging.current) return;
+        isDragging.current = false;
+        applyInertia();
+    };
+
+    useEffect(() => {
+        return () => cancelAnimationFrame(rafId.current);
+    }, []);
+
+    // Sync external value changes (like when editing)
+    useEffect(() => {
+        if (!isDragging.current) {
+            setRotation(-(value - min) * itemHeight);
+        }
+    }, [value]);
+
+    return (
+        <div
+            className="picker-container"
+            onMouseDown={(e) => handleStart(e.pageY)}
+            onMouseMove={(e) => handleMove(e.pageY)}
+            onMouseUp={handleEnd}
+            onMouseLeave={handleEnd}
+            onTouchStart={(e) => handleStart(e.touches[0].pageY)}
+            onTouchMove={(e) => {
+                e.preventDefault();
+                handleMove(e.touches[0].pageY);
+            }}
+            onTouchEnd={handleEnd}
+        >
+            <div className="chrome-rail rail-left"></div>
+            <div className="chrome-rail rail-right"></div>
+            <div className="picker-mask"></div>
+            <div className="outer-frame"></div>
+            <div className="wheel-wrap">
+                {Array.from({ length: max - min + 1 }, (_, i) => i + min).map((num, index) => {
+                    const distance = index - Math.round(-rotation / itemHeight);
+                    const absDistance = Math.abs(distance);
+                    const rotateX = distance * -28;
+                    const zTranslate = absDistance * -75;
+                    const yTranslate = rotation + (index * itemHeight);
+                    const opacity = Math.max(0, 1 - absDistance * 0.45);
+
+                    return (
+                        <div
+                            key={num}
+                            className={`number-cell ${absDistance === 0 ? 'active' : ''}`}
+                            style={{
+                                transform: `translateY(${yTranslate}px) translateZ(${zTranslate}px) rotateX(${rotateX}deg)`,
+                                opacity,
+                                zIndex: 10 - absDistance
+                            }}
+                        >
+                            {num.toString().padStart(2, '0')}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
@@ -262,19 +410,20 @@ function App() {
     };
 
     const handlePreSubmit = (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        if (!formData.description || !formData.amount) return;
+
         if (editingId) {
-            // Busca o item original para saber se é recorrente
             const item = transactions.find(t => t.id === editingId);
             if (!item) {
                 alert('Erro: item não encontrado.');
                 return;
             }
             if (item.recurringGroupId) {
-                // Mostra modal para perguntar: só este ou este e futuros
+                // Item recorrente → mostra modal de estratégia (ele fica ACIMA do modal de lançamento)
                 setShowEditStrategy(true);
             } else {
-                // Item normal — edita direto
+                // Item normal → edita direto
                 processSubmit('single');
             }
         } else {
@@ -706,97 +855,279 @@ function App() {
                 ))}
             </div>
 
-            {/* MODAL DE LANÇAMENTO */}
+            {/* ═══════════════ MODAL DE LANÇAMENTO — PREMIUM ═══════════════ */}
             {isTransactionModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className={`bg-white ${ui.radius} shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in duration-300`}>
-                        <div className="p-6 bg-slate-900 flex justify-between items-center text-white">
-                            <h2 className={`${ui.textBase} font-bold uppercase tracking-[0.3em]`}>{editingId ? "Editar Lançamento" : "Novo Lançamento"}</h2>
-                            <button onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }} className="hover:rotate-90 transition-all p-2 opacity-60 hover:opacity-100">
-                                <Icon name="x" className="w-6 h-6" />
-                            </button>
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)', animation: 'modalOverlayIn 0.2s ease-out' }}
+                    onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+                        style={{ animation: 'modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* ── Cabeçalho Gradiente Corporativo ── */}
+                        <div className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)' }}>
+                            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.2) 0%, transparent 40%)' }}></div>
+                            <div className="relative p-6 sm:p-8 text-white">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/60 mb-1">
+                                            {editingId ? "Editar Lançamento" : "Novo Lançamento"}
+                                        </p>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-lg font-bold text-white/40">R$</span>
+                                            <span className="text-3xl sm:text-4xl font-black tracking-tight">
+                                                {formData.amount ? formatCurrencyDisplay(formData.amount) : '0,00'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }}
+                                        className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+                                    >
+                                        <Icon name="x" className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                {/* Type Toggle Pills */}
+                                <div className="type-toggle mt-5" style={{ border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, type: 'expense' })}
+                                        className={`type-pill ${formData.type === 'expense' ? 'active-expense' : ''}`}
+                                        style={formData.type !== 'expense' ? { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' } : {}}
+                                    >
+                                        Despesa
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, type: 'income' })}
+                                        className={`type-pill ${formData.type === 'income' ? 'active-income' : ''}`}
+                                        style={formData.type !== 'income' ? { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' } : {}}
+                                    >
+                                        Receita
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Banner de edição recorrente (dentro do header) */}
+                            {editingId && isEditingRecurring && (() => {
+                                const editItem = transactions.find(t => t.id === editingId);
+                                if (!editItem) return null;
+                                return (
+                                    <div className="px-6 sm:px-8 py-2.5 bg-white/10 flex items-center gap-2.5 border-t border-white/10">
+                                        <Icon name="repeat" className="w-3.5 h-3.5 text-amber-300" />
+                                        <span className="text-[10px] font-bold text-amber-200 uppercase tracking-widest">
+                                            Parcela {editItem.recurringIndex}/{editItem.recurringTotal} — Série Recorrente
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
-                        <div className={`p-8 ${ui.gap} max-h-[85vh] overflow-y-auto`}>
-                            <form onSubmit={(e) => { e.preventDefault(); handlePreSubmit(e); }} className="space-y-6">
+                        {/* ── Corpo do Formulário ── */}
+                        <div className="p-5 sm:p-7 max-h-[60vh] overflow-y-auto no-scrollbar">
+                            <form onSubmit={handlePreSubmit} className="space-y-4">
+
+                                {/* Descrição */}
                                 <div>
-                                    <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Descrição</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-1.5 flex items-center gap-1.5">
+                                        <Icon name="pencil" className="w-3 h-3 text-slate-300" />
+                                        Descrição
+                                    </label>
                                     <input
                                         ref={descriptionInputRef}
                                         type="text"
                                         required
-                                        placeholder="EX: ALUGUEL"
-                                        className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textLg} font-medium outline-none focus:ring-1 focus:ring-slate-300 rounded`}
+                                        placeholder="Ex: Aluguel, Mercado..."
+                                        className="w-full modal-input text-sm uppercase"
                                         value={formData.description}
                                         onChange={handleDescriptionChange}
                                     />
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+                                {/* Montante + Data */}
+                                <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Montante (R$)</label>
-                                        <input type="text" required placeholder="0,00" className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textXl} font-bold text-slate-900 outline-none rounded`} value={formatCurrencyDisplay(formData.amount)} onChange={handleAmountChange} />
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-1.5 flex items-center gap-1.5">
+                                            <Icon name="wallet" className="w-3 h-3 text-slate-300" />
+                                            Valor (R$)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="0,00"
+                                            className="w-full modal-input text-lg font-extrabold text-slate-900"
+                                            value={formatCurrencyDisplay(formData.amount)}
+                                            onChange={handleAmountChange}
+                                        />
                                     </div>
                                     <div>
-                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Data</label>
-                                        <input type="date" className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold outline-none rounded`} value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-1.5 flex items-center gap-1.5">
+                                            <Icon name="calendar" className="w-3 h-3 text-slate-300" />
+                                            Data
+                                        </label>
+                                        <input
+                                            type="date"
+                                            className="w-full modal-input text-xs font-bold"
+                                            value={formData.date}
+                                            onChange={e => setFormData({ ...formData, date: e.target.value })}
+                                        />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                {/* Grupo + Categoria */}
+                                <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Grupo</label>
-                                        <div className="flex gap-2 mt-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-1.5 flex items-center gap-1.5">
+                                            <Icon name="layer" className="w-3 h-3 text-slate-300" />
+                                            Grupo
+                                        </label>
+                                        <div className="flex gap-1.5">
                                             {!isCreatingGroup ? (
                                                 <Fragment>
-                                                    <select className={`w-full ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase cursor-pointer rounded`} value={formData.accountGroup} onChange={e => setFormData({ ...formData, accountGroup: e.target.value })}>
+                                                    <select
+                                                        className="w-full modal-input text-xs font-bold uppercase cursor-pointer"
+                                                        value={formData.accountGroup}
+                                                        onChange={e => setFormData({ ...formData, accountGroup: e.target.value })}
+                                                    >
                                                         {groups.map(g => <option key={g} value={g}>{g}</option>)}
                                                     </select>
-                                                    <button type="button" onClick={() => setIsCreatingGroup(true)} className={`${ui.btnPad} bg-slate-900 text-white rounded hover:bg-slate-800`}><Icon name="plus" className={ui.icon} /></button>
+                                                    <button type="button" onClick={() => setIsCreatingGroup(true)} className="px-3 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors flex-shrink-0">
+                                                        <Icon name="plus" className="w-3.5 h-3.5" />
+                                                    </button>
                                                 </Fragment>
                                             ) : (
                                                 <Fragment>
-                                                    <input type="text" autoFocus placeholder="NOVO GRUPO..." className={`w-full ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase rounded`} value={newGroupName} onChange={e => setNewGroupName(e.target.value.toUpperCase())} />
-                                                    <button type="button" onClick={handleCreateGroup} className={`${ui.btnPad} bg-emerald-600 text-white rounded hover:bg-emerald-700`}><Icon name="check" className={ui.icon} /></button>
-                                                    <button type="button" onClick={() => setIsCreatingGroup(false)} className={`${ui.btnPad} bg-slate-200 text-slate-600 rounded hover:bg-slate-300`}><Icon name="x" className={ui.icon} /></button>
+                                                    <input
+                                                        type="text"
+                                                        autoFocus
+                                                        placeholder="NOVO..."
+                                                        className="w-full modal-input text-xs font-bold uppercase"
+                                                        value={newGroupName}
+                                                        onChange={e => setNewGroupName(e.target.value.toUpperCase())}
+                                                    />
+                                                    <button type="button" onClick={handleCreateGroup} className="px-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors flex-shrink-0">
+                                                        <Icon name="check" className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button type="button" onClick={() => setIsCreatingGroup(false)} className="px-2.5 rounded-xl bg-slate-200 text-slate-500 hover:bg-slate-300 transition-colors flex-shrink-0">
+                                                        <Icon name="x" className="w-3.5 h-3.5" />
+                                                    </button>
                                                 </Fragment>
                                             )}
                                         </div>
                                     </div>
                                     <div>
-                                        <label className={`${ui.textBase} font-bold text-slate-400 uppercase tracking-widest`}>Tipo</label>
-                                        <select className={`w-full mt-2 ${ui.inputPad} bg-slate-50 border-none ${ui.textBase} font-bold uppercase outline-none rounded`} value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
-                                            <option value="expense">Despesa</option>
-                                            <option value="income">Receita</option>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-1.5 flex items-center gap-1.5">
+                                            <Icon name="grid" className="w-3 h-3 text-slate-300" />
+                                            Categoria
+                                        </label>
+                                        <select
+                                            className="w-full modal-input text-xs font-bold uppercase cursor-pointer"
+                                            value={formData.category}
+                                            onChange={e => setFormData({ ...formData, category: e.target.value })}
+                                        >
+                                            {['GERAL', 'ALIMENTAÇÃO', 'MORADIA', 'TRANSPORTE', 'SAÚDE', 'EDUCAÇÃO', 'LAZER', 'VESTUÁRIO', 'SERVIÇOS', 'INVESTIMENTO', 'OUTROS'].map(cat => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>
 
-                                {editingId && !formData.isRecurring ? (
-                                    <div className="p-4 rounded border text-center bg-blue-50 border-blue-200">
-                                        <p className={`${ui.textBase} font-bold uppercase tracking-widest text-blue-700`}>
-                                            Editando Transação Única
-                                        </p>
-                                    </div>
+                                {/* ── Divisor ── */}
+                                <div className="flex items-center gap-3 py-1">
+                                    <div className="flex-1 h-px bg-slate-100"></div>
+                                    <Icon name="repeat" className="w-3 h-3 text-slate-300" />
+                                    <div className="flex-1 h-px bg-slate-100"></div>
+                                </div>
+
+                                {/* ── Seção Recorrência ── */}
+                                {editingId ? (
+                                    isEditingRecurring ? (
+                                        <div className="rounded-xl p-4" style={{ background: 'linear-gradient(135deg, #fffbeb, #fef3c7)', border: '1.5px solid #fcd34d' }}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-7 h-7 rounded-lg bg-amber-400/20 flex items-center justify-center">
+                                                        <Icon name="repeat" className="w-3.5 h-3.5 text-amber-600" />
+                                                    </div>
+                                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">
+                                                        Série Recorrente
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <WheelPicker
+                                                value={formData.recurringMonths}
+                                                onChange={(val) => setFormData({ ...formData, recurringMonths: val })}
+                                                min={1}
+                                                max={48}
+                                            />
+                                            <p className="text-[9px] font-semibold text-amber-500 mt-2.5 text-center uppercase tracking-wider">
+                                                Ao confirmar, escolha editar apenas esta ou esta + futuras
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-xl p-4 text-center" style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', border: '1.5px solid #93c5fd' }}>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <div className="w-6 h-6 rounded-lg bg-blue-400/20 flex items-center justify-center">
+                                                    <Icon name="pencil" className="w-3 h-3 text-blue-600" />
+                                                </div>
+                                                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-blue-700">
+                                                    Editando Transação Única
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )
                                 ) : (
-                                    <div className="p-4 bg-slate-50 rounded">
-                                        <label className="flex items-center gap-4 cursor-pointer group">
-                                            <input type="checkbox" className="w-5 h-5 text-slate-900 rounded border-slate-300 focus:ring-0" disabled={!!editingId} checked={formData.isRecurring} onChange={e => setFormData({ ...formData, isRecurring: e.target.checked })} />
-                                            <span className={`${ui.textBase} font-bold text-slate-500 uppercase tracking-widest group-hover:text-slate-800`}>
-                                                {editingId ? 'Série Recorrente Ativa' : 'Repetir Próximos Meses'}
-                                            </span>
+                                    <div className={`rounded-xl p-4 transition-all duration-300 ${formData.isRecurring ? '' : 'bg-slate-50 border border-slate-100'}`}
+                                        style={formData.isRecurring ? { background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)', border: '1.5px solid #a5b4fc' } : {}}>
+                                        <label className="flex items-center justify-between cursor-pointer select-none">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${formData.isRecurring ? 'bg-indigo-500/20' : 'bg-slate-200'}`}>
+                                                    <Icon name="repeat" className={`w-3.5 h-3.5 ${formData.isRecurring ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                                </div>
+                                                <span className={`text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${formData.isRecurring ? 'text-indigo-700' : 'text-slate-500'}`}>
+                                                    Repetir nos Próximos Meses
+                                                </span>
+                                            </div>
+                                            <label className="toggle-switch">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.isRecurring}
+                                                    onChange={e => setFormData({ ...formData, isRecurring: e.target.checked, recurringMonths: e.target.checked ? 2 : 1 })}
+                                                />
+                                                <span className="toggle-slider"></span>
+                                            </label>
                                         </label>
                                         {formData.isRecurring && (
-                                            <div className="mt-4 p-4 bg-white rounded border border-slate-100">
-                                                <label className={`${ui.textBase} font-bold text-slate-400 uppercase block mb-3 text-center tracking-widest`}>Duração: {formData.recurringMonths} meses</label>
-                                                <input type="range" min="1" max="48" className="w-full accent-slate-900" value={formData.recurringMonths} onChange={e => setFormData({ ...formData, recurringMonths: parseInt(e.target.value, 10) })} />
+                                            <div className="mt-4 bg-white/70 rounded-lg p-4 border border-indigo-200/50" style={{ animation: 'modalFadeIn 0.2s ease-out' }}>
+                                                <WheelPicker
+                                                    value={formData.recurringMonths}
+                                                    onChange={(val) => setFormData({ ...formData, recurringMonths: val })}
+                                                    min={2}
+                                                    max={48}
+                                                />
                                             </div>
                                         )}
                                     </div>
                                 )}
 
-                                <div className="flex gap-4 pt-4">
-                                    <button type="button" onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }} className={`flex-1 ${ui.btnPad} border border-slate-200 text-slate-400 font-bold uppercase ${ui.textBase} tracking-widest rounded-lg hover:bg-slate-50 transition-all`}>Cancelar</button>
-                                    <button type="submit" className={`flex-[2] ${ui.btnPad} bg-slate-900 text-white font-bold uppercase ${ui.textBase} tracking-widest rounded-lg hover:bg-slate-800 transition-all shadow-lg`}>
+                                {/* ── Botões ── */}
+                                <div className="flex gap-3 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setIsTransactionModalOpen(false); handleCancelEdit(); }}
+                                        className="flex-1 py-3.5 btn-ghost rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-[2] py-3.5 btn-primary-gradient rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all"
+                                        style={{ animation: 'pulseGlow 3s ease-in-out infinite' }}
+                                    >
                                         {editingId ? "Confirmar Atualização" : "Lançar Agora"}
                                     </button>
                                 </div>

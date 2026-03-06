@@ -1,58 +1,75 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-<head>
-    
-<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-<link rel="shortcut icon" href="favicon.ico">
 
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0f172a">
-    
-    
+<head>
+
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="shortcut icon" href="favicon.ico">
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a">
+
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Meu Controle Financeiro</title>
-    
+
     <!-- Configurações para PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2845/2845893.png">
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        
-        :root { font-size: 16px; }
-        @media (min-width: 768px) { :root { font-size: 18px; } }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-        body { 
-            font-family: 'Inter', sans-serif; 
+        :root {
+            font-size: 16px;
+        }
+
+        @media (min-width: 768px) {
+            :root {
+                font-size: 18px;
+            }
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
             background-color: #f1f5f9;
             color: #1e293b;
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
 
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
 
-        input, select {
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        input,
+        select {
             border: 1px solid #cbd5e1 !important;
-            border-radius: 8px !important;
+            border-radius: 10px !important;
             padding: 0.75rem !important;
             font-size: 0.9rem !important;
         }
-        input:focus, select:focus {
+
+        input:focus,
+        select:focus {
             border-color: #0f172a !important;
-            box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1) !important;
+            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1) !important;
             outline: none !important;
         }
 
@@ -61,8 +78,290 @@
             background-color: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(4px);
         }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.92) translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        @keyframes modalOverlayIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+            }
+
+            50% {
+                box-shadow: 0 4px 25px rgba(15, 23, 42, 0.4);
+            }
+        }
+
+        /* === Premium Toggle Switch === */
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #e2e8f0;
+            border-radius: 26px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        .toggle-switch input:checked+.toggle-slider {
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+        }
+
+        .toggle-switch input:checked+.toggle-slider:before {
+            transform: translateX(22px);
+        }
+
+        /* === Type Toggle Pills === */
+        .type-toggle {
+            display: flex;
+            gap: 0;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #e2e8f0;
+        }
+
+        .type-pill {
+            flex: 1;
+            padding: 10px 16px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: white;
+            color: #94a3b8;
+            border: none;
+            outline: none;
+        }
+
+        .type-pill.active-expense {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .type-pill.active-income {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+            box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .type-pill:not(.active-expense):not(.active-income):hover {
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+        /* === 3D Wheel Picker (Vertical Gauge) === */
+        :root {
+            --picker-item-h: 70px;
+            --picker-visible: 3;
+        }
+
+        .picker-container {
+            position: relative;
+            height: calc(var(--picker-item-h) * var(--picker-visible));
+            width: 100%;
+            max-width: 260px;
+            margin: 10px auto;
+            perspective: 1000px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .chrome-rail {
+            position: absolute;
+            top: 10%;
+            height: 80%;
+            width: 5px;
+            background: linear-gradient(to right, #94a3b8, #f8fafc, #94a3b8);
+            border-radius: 3px;
+            z-index: 25;
+            box-shadow: 1px 0 5px rgba(0, 0, 0, 0.1);
+            opacity: 0.6;
+        }
+
+        .rail-left {
+            left: 20px;
+        }
+
+        .rail-right {
+            right: 20px;
+        }
+
+        .picker-mask {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+            background: linear-gradient(to bottom,
+                    rgba(255, 255, 255, 1) 0%,
+                    rgba(255, 255, 255, 0) 25%,
+                    rgba(255, 255, 255, 0) 75%,
+                    rgba(255, 255, 255, 1) 100%);
+        }
+
+        .wheel-wrap {
+            position: relative;
+            height: var(--picker-item-h);
+            width: 100%;
+            transform-style: preserve-3d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .number-cell {
+            position: absolute;
+            height: 60px;
+            width: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            backface-visibility: hidden;
+            transition: all 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+            color: #cbd5e1;
+            border: 1px solid #e2e8f0;
+        }
+
+        .number-cell.active {
+            font-size: 2.5rem;
+            width: 130px;
+            height: 85px;
+            z-index: 50 !important;
+            color: #0f172a;
+            border-color: #94a3b8;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+        }
+
+        .outer-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 160px;
+            height: 95px;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            pointer-events: none;
+            z-index: 15;
+            background: rgba(248, 250, 252, 0.2);
+        }
+
+        /* === Modal Premium Input Styles === */
+        .modal-input {
+            background: #f8fafc !important;
+            border: 1.5px solid #cbd5e1 !important;
+            border-radius: 12px !important;
+            padding: 14px 16px !important;
+            font-weight: 600 !important;
+            transition: all 0.2s ease !important;
+            color: #0f172a !important;
+        }
+
+        .modal-input:focus {
+            background: #fff !important;
+            border-color: #0f172a !important;
+            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1) !important;
+        }
+
+        .modal-input::placeholder {
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+
+        /* === Gradient Buttons Corporativos === */
+        .btn-primary-gradient {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+            transition: all 0.25s ease;
+        }
+
+        .btn-primary-gradient:hover {
+            filter: brightness(1.2);
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary-gradient:active {
+            transform: translateY(0);
+        }
+
+        .btn-ghost {
+            background: #fff;
+            color: #475569;
+            border: 1.5px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+
+        .btn-ghost:hover {
+            background: #f8fafc;
+            color: #0f172a;
+            border-color: #94a3b8;
+        }
     </style>
 </head>
+
 <body>
     <div id="root"></div>
 
@@ -75,4 +374,5 @@
     </script>
     <script type="text/babel" data-type="module" src="App.jsx"></script>
 </body>
+
 </html>
